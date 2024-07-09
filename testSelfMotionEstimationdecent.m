@@ -5,21 +5,11 @@ v = VideoReader('videos\IMG_1076.MOV'); % 6dof
 % v = VideoReader('C:\Users\jom\Downloads\IMG_1070.MOV');
 close all
 [X,Y] = meshgrid(1:v.Width,1:v.Height);
-
-xc = mean(X(:));
-yc = mean(Y(:));
-
-X = X - xc;
-Y = Y - yc ;
-
-I1 = double(im2gray(v.readFrame()));
-I2 = double(im2gray(v.readFrame()));
-
+X = X - mean(X(:));
+Y = Y - mean(Y(:));
 
 
 % spherical coordinates of pixels
-% currently using an approximation simply from the camera reported
-% parameters
 sensorWidth = 4; %mm
 % focalLengthEquiv = 13; %mm
 % cropFactor = 8.6;
@@ -31,65 +21,52 @@ S = [ repmat(d,numel(X),1) -X(:)/hRes*sensorWidth Y(:)/hRes*sensorWidth];
 S = S./repmat(vecnorm(S,2,2),1,3);
 
 
-% I Need to get two jacobians
-%
-% One is the jacobian of pixels over angles
-%
-% Another is the jacobian of pixels over linear displacements
-%
-% I might as well just generalize a bit more and go directly to 
-% random locations of pixels. The math will be exactly the same and cannot
-% approximate anything useful really. 
-%
-% The only thing that can be approximated is the 2D foveal motion
-
 % gradients of the angles to convert the gradients to degs
 % this should mean something like what is the torsion, horizontal, or
 % vertifcal rotation in degrees that would move you from pixel to pixel
 % [Gtx,Gty] = imgradientxy(reshape(S(:,1),size(I1)));
+ [Gxmag] = imgradient(reshape(S(:,2),size(I1)));
+ [Gymag] = imgradient(reshape(S(:,3),size(I1)));
+ [Gxx,Gxy] = imgradientxy(acosd(reshape(S(:,2),size(I1))),"central");
+ [Gyx,Gyy] = imgradientxy(acosd(reshape(S(:,3),size(I1))),"central");
 
- [Gxx,Gxy] = imgradientxy(acosd(reshape(S(:,2),size(I1))./cos(reshape(S(:,1),size(I1)))),"central");
- [Gyx,Gyy] = imgradientxy(acosd(reshape(S(:,3),size(I1))./cos(reshape(S(:,1),size(I1)))),"central");
+% %%
+% figure
+% subplot(3,3,1)
+% imagesc(reshape(S(:,1),size(I1'))');
+% subplot(3,3,2)
+% imagesc(Gtx);
+% subplot(3,3,3)
+% imagesc(Gty);
+% 
+% subplot(3,3,4)
+% imagesc(reshape(S(:,2),size(I1'))');
+% subplot(3,3,5)
+% imagesc(Gxx);
+% subplot(3,3,6)
+% imagesc(Gxy);
+% 
+% subplot(3,3,7)
+% imagesc(reshape(S(:,2),size(I1'))');
+% subplot(3,3,8)
+% imagesc(Gyx);
+% subplot(3,3,9)
+% imagesc(Gyy);
 
- [GxxL,GxyL] = imgradientxy((reshape(S(:,2),size(I1)))./reshape(S(:,1),size(I1)),"central");
- [GyxL,GyyL] = imgradientxy((reshape(S(:,3),size(I1)))./reshape(S(:,1),size(I1)),"central");
-Gxx = abs(Gxx);
-Gyx = abs(Gyx);
-GxxL = abs(GxxL);
-GyxL = abs(GyxL);
 
 
-% Jacobian Dpix/Dsphere
-% The inverse of the grandients of the sphere coordinates for the image
-% pixels 
-[J11,J12] = imgradientxy(reshape(S(:,1),size(I1)),"central");
-[J21,J22] = imgradientxy(reshape(S(:,2),size(I1)),"central");
-[J31,J32] = imgradientxy(reshape(S(:,3),size(I1)),"central");
-Jpixsphere(1,1,:) = 1./J11;
-Jpixsphere(2,1,:) = 1./J21;
-Jpixsphere(3,1,:) = 1./J31;
-Jpixsphere(1,2,:) = 1./J12;
-Jpixsphere(2,2,:) = 1./J22;
-Jpixsphere(3,2,:) = 1./J32;
-
-% Jacobian Dsphere/Dangle or Dsphere/Dlinear
 
 RV = cross(S,repmat([1 0 0],height(S),1));
 Q = quaternion(RV, 'rotvec');
 R = Q.rotmat("point");
 
+angvel = nan(v.NumFrames,3);
+transvel = nan(v.NumFrames,3);
+rmsI = nan(v.NumFrames,3);
+vout = VideoWriter('videos\Test6doftoday.mp4');
 
+open(vout);
 
-    Rx = squeeze(R(3,:,:))';
-    Ry = squeeze(R(2,:,:))';
-
-    Tx = squeeze(R(2,:,:))';
-    Ty = squeeze(R(3,:,:))';
-
-% Rx = [Gtx(:) ,Gxx(:) , Gyx(:) ];
-% Ry = [Gty(:) ,Gxy(:) , Gyy(:) ];
-% Tx = [GtxL(:) ,GxxL(:) , GyxL(:) ];
-% Ty = [GtyL(:) ,GxyL(:) , GyyL(:) ];
 
 if ( 0)
     %%
@@ -122,9 +99,9 @@ close all
     for ir=1:length(r)
          i=r(ir);
             % vector pointing out
-            quiver3(S(i,1),S(i,2),S(i,3),Gtx(i)/2,Gxx(i)/2,Gyx(i)/2, 'linewidth',2,'color','r')
+            quiver3(S(i,1),S(i,2),S(i,3),Gtx(i)/10,Gxx(i)/10,Gyx(i)/10, 'linewidth',2,'color','r')
             % translational x axis % rotational y axis
-            quiver3(S(i,1),S(i,2),S(i,3),Gty(i)/2,Gxy(i)/2,Gyy(i)/2, 'linewidth',2,'color','b')
+            quiver3(S(i,1),S(i,2),S(i,3),Gty(i)/10,Gxy(i)/10,Gyy(i)/10, 'linewidth',2,'color','b')
             % % rotational x axis % translational y axis
             % quiver3(S(i,1),S(i,2),S(i,3),R(3,1,i)/10,R(3,2,i)/10,R(3,3,i)/10, 'linewidth',2,'color','g')
     end
@@ -138,12 +115,8 @@ end
 
 %%
 
-angvel = nan(v.NumFrames,3);
-transvel = nan(v.NumFrames,3);
-rmsI = nan(v.NumFrames,3);
-vout = VideoWriter('videos\Test6dof.mp4', 'MPEG-4');
-
-open(vout);
+I1 = double(im2gray(v.readFrame()));
+I2 = double(im2gray(v.readFrame()));
 
 clear h;
 
@@ -198,13 +171,19 @@ ylim([-1 1]*50);
 xlim([0 v.NumFrames])
 
 h(1).Parent.CLim = [0 255];
-h(2).Parent.CLim = [-100 100]*0.1;
-h(3).Parent.CLim = [-100 100]*0.1;
-h(4).Parent.CLim = [-100 100]*0.1;
-h(5).Parent.CLim = [-100 100]*0.1;
-h(6).Parent.CLim = [-100 100]*0.1;
+h(2).Parent.CLim = [-100 100];
+h(3).Parent.CLim = [-100 100];
+h(4).Parent.CLim = [-100 100];
+h(5).Parent.CLim = [-100 100];
+h(6).Parent.CLim = [-100 100];
 
 
+
+    Rx = squeeze(R(3,:,:))';
+    Ry = squeeze(R(2,:,:))';
+
+    Tx = squeeze(R(2,:,:))';
+    Ty = squeeze(R(3,:,:))';
 
 i=0;
 t2 = v.CurrentTime;
@@ -212,11 +191,11 @@ while hasFrame(v)
     i = i+1;
 
     I1 = double(im2gray(readFrame(v)));
-    I1 = imgaussfilt(I1,3);
+    I1 = imgaussfilt(I1,5);
     t1 = v.CurrentTime;
-    [Gx,Gy] = imgradientxy((I1+I2)/2,"central");
-    Gx = imgaussfilt(Gx,3);
-    Gy = imgaussfilt(Gy,3);
+    [Gx,Gy] = imgradientxy(I1,"central");
+    Gx = imgaussfilt(Gx,5);
+    Gy = imgaussfilt(Gy,5);
     dI = (I1-I2);
     dt = (t1-t2);
     dIdt = dI/dt;
@@ -225,19 +204,17 @@ while hasFrame(v)
 
 
     % convert the gradients to espherical coordinates
+     GxR = Gx./Gxx;
+     GyR = Gy./Gyy;
 
-    GR = Gx(:)./Gxx(:).*Rx + Gy(:)./Gyy(:).*Ry;
-    GL = Gx(:)./GxxL(:).*Tx + Gy(:)./GyyL(:).*Ty;
-    GR = Gx(:).*Gxx(:).*Rx + Gy(:).*Gyy(:).*Ry;
-    GL = Gx(:)./GxxL(:).*Tx + Gy(:)./GyyL(:).*Ty;
-   % GR = Gx(:).*Rx + Gy(:).*Ry;
-   % GL = Gx(:).*Tx + Gy(:).*Ty;
 
+    GR = GxR(:).*Rx + GyR(:).*Ry;
     [angvel(i,:), ~,Res] = regress(dIdt(:),GR);
     I2 = I1;
 
     ResI = reshape(Res, size(I1));
 
+    GL = Gx(:).*Tx + Gy(:).*Ty;
     [transvel(i,:), ~,Res2] = regress(Res,GL);
     ResI2 = reshape(Res2, size(I1));
 
